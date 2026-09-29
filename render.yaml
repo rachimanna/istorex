@@ -5,6 +5,7 @@ services:
     name: istorex
     runtime: docker
     plan: free
+    region: frankfurt # closest Render region to the Supabase project (eu-west-1)
     healthCheckPath: /api/health
     envVars:
       - key: APP_URL
