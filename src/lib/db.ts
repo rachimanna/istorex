@@ -15,7 +15,9 @@ function databaseUrl(): string | undefined {
   return `${raw}${raw.includes("?") ? "&" : "?"}connection_limit=${limit}&pool_timeout=20`;
 }
 
+// DATABASE_URL is absent at build time (e.g. Docker build on Render) — only override it when present.
+const url = databaseUrl();
 export const db =
-  globalForPrisma.prisma ?? new PrismaClient({ log: ["warn", "error"], datasources: { db: { url: databaseUrl() } } });
+  globalForPrisma.prisma ?? new PrismaClient({ log: ["warn", "error"], ...(url ? { datasources: { db: { url } } } : {}) });
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
