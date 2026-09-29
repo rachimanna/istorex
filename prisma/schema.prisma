@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum CategoryKind {
+  GAME
+  APP
+}
+
+enum AppStatus {
+  DRAFT
+  PUBLISHED
+  HIDDEN
+  TAKEN_DOWN
+}
+
+/// How a release reaches the device. Only mechanisms that iOS actually supports.
+enum Distribution {
+  APP_STORE           // official apps.apple.com link
+  TESTFLIGHT          // public TestFlight invite link
+  AD_HOC_OTA          // itms-services + manifest.plist, only for UDIDs in the ad-hoc profile
+  ENTERPRISE_OTA      // itms-services + manifest.plist, Apple Developer Enterprise Program (in-house only)
+  EU_WEB_DISTRIBUTION // Apple-authorised Web Distribution by the developer (EU, iOS 17.5+)
+  ALT_MARKETPLACE     // Apple-approved alternative marketplace (EU), e.g. AltStore PAL
+  IPA_SIDELOAD        // raw IPA; the user signs it themselves (AltStore/SideStore/Xcode)
+}
+
+enum SigningStatus {
+  NOT_APPLICABLE  // external link: Apple / the developer handles signing
+  VALID
+  EXPIRING_SOON
+  EXPIRED
+  UNSIGNED
+  INVALID
+  UNKNOWN
+}
+
+enum ProfileType {
+  NONE
+  DEVELOPMENT
+  AD_HOC
+  ENTERPRISE
+  APP_STORE
+}
+
+enum ReleaseState {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum DownloadKind {
+  INSTALL_MANIFEST
+  IPA_DOWNLOAD
+  EXTERNAL_LINK
+}
+
+enum ReportReason {
+  COPYRIGHT
+  MALWARE
+  BROKEN
+  MISLEADING
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  REJECTED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  displayName  String
+  role         Role       @default(USER)
+  /// Optional device UDID the user entered, used only to check ad-hoc profile membership.
+  deviceUdid   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  sessions     Session[]
+  favorites    Favorite[]
+  downloads    DownloadEvent[]
+  reports      Report[]
+  auditLogs    AuditLog[]
+}
+
+model Session {
+  id        String   @id // sha256 of the cookie token
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  slug      String       @unique
+  name      String
+  kind      CategoryKind
+  icon      String       @default("📦")
+  sortOrder Int          @default(0)
+  apps      App[]
+  createdAt DateTime     @default(now())
+}
+
+model App {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  name            String
+  subtitle        String       @default("")
+  developer       String
+  description     String
+  categoryId      String
+  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  iconKey         String?
+  status          AppStatus    @default(DRAFT)
+  featured        Boolean      @default(false)
+  /// Modified build of another app (tweaked). Must carry a legal basis.
+  isModified      Boolean      @default(false)
+  originalAppName String?
+  /// Where the build comes from and why it may be redistributed (licence, author permission, open source...).
+  legalBasis      String       @default("")
+  sourceUrl       String?
+  ageRating       String       @default("4+")
+  downloadCount   Int          @default(0)
+  publishedAt     DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  screenshots     Screenshot[]
+  releases        Release[]
+  favorites       Favorite[]
+  downloads       DownloadEvent[]
+  reports         Report[]
+
+  @@index([status, publishedAt])
+  @@index([status, downloadCount])
+  @@index([status, updatedAt])
+  @@index([categoryId])
+}
+
+model Screenshot {
+  id        String   @id @default(cuid())
+  appId     String
+  app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  key       String
+  width     Int
+  height    Int
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([appId, sortOrder])
+}
+
+model Release {
+  id                 String        @id @default(cuid())
+  appId              String
+  app                App           @relation(fields: [appId], references: [id], onDelete: Cascade)
+  version            String
+  buildNumber        String        @default("")
+  minIOS             String        @default("15.0")
+  changelog          String        @default("")
+  distribution       Distribution
+  /// For external distribution: App Store / TestFlight / marketplace / developer URL.
+  externalUrl        String?
+  /// For hosted builds: object key in the private IPA bucket.
+  ipaKey             String?
+  sizeBytes          BigInt        @default(0)
+  sha256             String?
+  bundleId           String?
+  state              ReleaseState  @default(PROCESSING)
+  isCurrent          Boolean       @default(false)
+  /// Validation findings: [{level: "error"|"warning", code, message}]
+  validation         Json          @default("[]")
+  signingStatus      SigningStatus @default(UNKNOWN)
+  profileType        ProfileType   @default(NONE)
+  teamName           String?
+  teamId             String?
+  profileExpiresAt   DateTime?
+  certExpiresAt      DateTime?
+  provisionedDevices String[]      @default([])
+  supportsIphone     Boolean       @default(true)
+  /// Admin attests that ENTERPRISE_OTA is used only within their organisation, per Apple's program terms.
+  enterpriseAttested Boolean       @default(false)
+  lastCheckAt        DateTime?
+  lastCheckOk        Boolean?
+  lastCheckError     String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  downloads          DownloadEvent[]
+
+  @@index([appId, isCurrent])
+  @@index([state])
+}
+
+model Favorite {
+  userId    String
+  appId     String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app       App      @relation(fields: [appId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, appId])
+}
+
+model DownloadEvent {
+  id        String       @id @default(cuid())
+  appId     String
+  app       App          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  releaseId String?
+  release   Release?     @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  kind      DownloadKind
+  /// Bytes we expect to be served from storage for this event (for egress budgeting).
+  bytes     BigInt       @default(0)
+  ipHash    String
+  userAgent String?
+  createdAt DateTime     @default(now())
+
+  @@index([appId, createdAt])
+  @@index([ipHash, createdAt])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  appId      String
+  app        App          @relation(fields: [appId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email      String?
+  reason     ReportReason
+  message    String
+  status     ReportStatus @default(OPEN)
+  resolution String?
+  ipHash     String
+  createdAt  DateTime     @default(now())
+  resolvedAt DateTime?
+
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json     @default("{}")
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ErrorLog {
+  id        String   @id @default(cuid())
+  source    String
+  message   String
+  context   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

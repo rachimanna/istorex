@@ -1,0 +1,43 @@
+# Caddy: automatic HTTPS (Let's Encrypt) + reverse proxy to the Next.js app.
+# DOMAIN, ACME_EMAIL and UPSTREAM come from the environment (see docker-compose.prod.yml).
+{
+	email {$ACME_EMAIL}
+	# Only affects Caddy's *local* CA (used for "localhost"); never touches the host trust store.
+	skip_install_trust
+	servers {
+		timeouts {
+			read_body 30m
+			write 30m
+		}
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Large IPA uploads are only allowed on the admin release endpoint.
+	@ipaUpload path_regexp ^/api/admin/apps/[^/]+/releases$
+	request_body @ipaUpload {
+		max_size 2GB
+	}
+	@other not path_regexp ^/api/admin/apps/[^/]+/releases$
+	request_body @other {
+		max_size 20MB
+	}
+
+	# Caddy replaces any client-supplied X-Forwarded-For with the real client IP
+	# (clients are not trusted proxies), which the app uses for rate limits.
+	reverse_proxy {$UPSTREAM:app:3000} {
+		flush_interval -1
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,0 +1,58 @@
+{
+  "name": "istorex",
+  "version": "1.0.0",
+  "private": true,
+  "description": "iStoreX — публичный каталог и сервис распространения iOS-приложений через поддерживаемые Apple механизмы",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "node scripts/seed.mjs",
+    "admin:create": "node scripts/create-admin.mjs",
+    "backup": "node scripts/backup.mjs",
+    "check:availability": "node scripts/check-availability.mjs",
+    "storage:init": "node scripts/create-buckets.mjs",
+    "dev:db": "node scripts/dev-db.mjs",
+    "test:fixtures": "node tests/make-fixtures.mjs",
+    "test:e2e": "node --env-file=.env tests/e2e.mjs"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1142.0",
+    "@aws-sdk/lib-storage": "^3.1142.0",
+    "@aws-sdk/s3-request-presigner": "^3.1142.0",
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "bplist-parser": "^0.3.2",
+    "busboy": "^1.6.0",
+    "next": "^16.3.7",
+    "plist": "^3.1.1",
+    "prisma": "^6.19.3",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
+    "yauzl": "^3.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^22.20.4",
+    "@types/plist": "^3.0.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/yauzl": "^3.4.0",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "@embedded-postgres/windows-x64@18.4.0-beta.17": true,
+    "@prisma/client@6.19.3": true
+  }
+}

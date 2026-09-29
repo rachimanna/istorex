@@ -1,0 +1,10 @@
+node_modules
+.next
+.dev-data
+.env
+.env.*
+!.env.example
+*.log
+tests
+backups
+.git

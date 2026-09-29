@@ -1,0 +1,84 @@
+# Production stack for a single VPS:  docker compose -f docker-compose.prod.yml up -d --build
+# Object storage is external (Cloudflare R2 / AWS S3 / Backblaze B2) — configure S3_* in .env.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+      UPSTREAM: app:3000
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Daily database backup to S3 (S3_BUCKET_BACKUP) + availability/signing check every 6 hours.
+  cron:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SKIP_MIGRATIONS: "true"
+    depends_on:
+      app:
+        condition: service_healthy
+    command: >
+      sh -c 'while true; do
+        node scripts/backup.mjs || echo "backup failed";
+        for i in 1 2 3 4; do
+          APP_URL=http://app:3000 node scripts/check-availability.mjs || echo "check failed";
+          sleep 21600;
+        done;
+      done'
+
+  # Optional antivirus scanning of uploaded IPAs. Enable with: --profile clamav and CLAMAV_HOST=clamav
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    profiles: ["clamav"]
+    expose:
+      - "3310"
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
