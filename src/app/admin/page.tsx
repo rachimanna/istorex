@@ -42,6 +42,10 @@ export default async function AdminDashboard() {
 
   return (
     <div className="stack">
+      <div className="row wrap" style={{ gap: 8 }}>
+        <Link href="/admin/apps/new" className="btn btn-primary btn-large" style={{ flex: "1 1 200px" }}>+ Добавить приложение</Link>
+        <Link href="/admin/apps" className="btn btn-glass btn-large" style={{ flex: "1 1 200px" }}>Все приложения</Link>
+      </div>
       <div className="kpis">
         <div className="glass kpi"><div className="v">{published}<span className="footnote"> / {totalApps}</span></div><div className="k">Опубликовано / всего</div></div>
         <div className="glass kpi"><div className="v">{users}</div><div className="k">Пользователей</div></div>
